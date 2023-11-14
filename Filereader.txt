@@ -1,0 +1,143 @@
+#include <iostream>
+#include <fstream>
+#include <unordered_map>
+#include <queue>
+#include <bitset>
+
+using namespace std;
+
+// Node structure for QTree
+struct Node {
+    char symbol;
+    Node* left;
+    Node* right;
+};
+
+// Comparator for priority queue
+struct CompareNodes {
+    bool operator()(const Node* a, const Node* b) const {
+        return a->symbol > b->symbol;
+    }
+};
+
+// Function to construct QTree from frequency data
+Node* constructQTree(const unordered_map<char, int>& frequency) {
+    priority_queue<Node*, vector<Node*>, CompareNodes> pq;
+    
+    // Create leaf nodes for each character and add them to the priority queue
+    for (const auto& pair : frequency) {
+        Node* leaf = new Node();
+        leaf->symbol = pair.first;
+        leaf->left = nullptr;
+        leaf->right = nullptr;
+        pq.push(leaf);
+    }
+    
+    // Construct the QTree by merging nodes
+    while (pq.size() > 1) {
+        Node* left = pq.top();
+        pq.pop();
+        
+        Node* right = pq.top();
+        pq.pop();
+        
+        Node* parent = new Node();
+        parent->symbol = 0;  // Internal node symbol is not relevant
+        parent->left = left;
+        parent->right = right;
+        
+        pq.push(parent);
+    }
+    
+    // Return the root of the QTree
+    return pq.top();
+}
+
+// Function to perform encryption (bit-trail generation)
+void encrypt(const unordered_map<char, string>& bitTrails, const string& inputFile, const string& outputFile) {
+    ifstream input(inputFile);
+    ofstream output(outputFile, ios::binary);
+    
+    char ch;
+    while (input.get(ch)) {
+        const string& bitTrail = bitTrails.at(ch);
+        bitset<8> bits(bitTrail);
+        output.write(reinterpret_cast<const char*>(&bits), sizeof(bits));
+    }
+    
+    input.close();
+    output.close();
+}
+
+// Function to perform decryption (bit-trail traversal)
+void decrypt(const Node* root, const string& inputFile, const string& outputFile) {
+    ifstream input(inputFile, ios::binary);
+    ofstream output(outputFile);
+    
+    bitset<8> bits;
+    while (input.read(reinterpret_cast<char*>(&bits), sizeof(bits))) {
+        Node* current = const_cast<Node*>(root);
+        while (current->left && current->right) {
+            if (bits.test(7)) {
+                current = current->right;
+            } else {
+                current = current->left;
+            }
+            bits <<= 1;
+        }
+        output << current->symbol;
+    }
+    
+    input.close();
+    output.close();
+}
+
+int main() {
+    // Part 1: Encryption
+    
+    // A. Read the file and handle exceptions
+    ifstream inputFile("PlentyOfRoomAtTheBottom.txt");
+    string rawdata;
+    char ch;
+    while (inputFile.get(ch)) {
+        if (ch < 32 || ch > 127) {  // Non-printable character
+            ch = '#';  // Assign a specific character of your choice
+        }
+        rawdata += ch;
+    }
+    inputFile.close();
+    
+    // B. Frequency counter algorithm
+    unordered_map<char, int> frequency;
+    for (char ch : rawdata) {
+        frequency[ch]++;
+    }
+    
+        // C. Sort lower ASCII frequency characters
+    Node* root = constructQTree(frequency);
+
+    // D. Create bit-trails for each character
+    unordered_map<char, string> bitTrails;
+
+    // Recursive function to generate bit-trails
+    void generateBitTrails(Node* node, string trail) {
+        if (node->left == nullptr && node->right == nullptr) {
+            bitTrails[node->symbol] = trail;
+            return;
+        }
+        generateBitTrails(node->left, trail + '0');
+        generateBitTrails(node->right, trail + '1');
+    }
+
+    generateBitTrails(root, "");
+
+    // E. Encrypt the file
+    encrypt(bitTrails, "PlentyOfRoomAtTheBottom.txt", "encrypted.bin");
+
+    // Part 2: Decryption
+
+    // A. Decrypt the file
+    decrypt(root, "encrypted.bin", "decrypted.txt");
+
+    return 0;
+}
